@@ -7,13 +7,11 @@ from fastapi import FastAPI, HTTPException
 app = FastAPI(
     title="Zoo Visitors API",
     description="API สถิติผู้เข้าชมสวนสัตว์ ปีงบประมาณ 2569",
-    version="1.0.0"
+    version="1.0.1"
 )
 
-# Resource ID ของชุดข้อมูลสวนสัตว์
 RESOURCE_ID = "57a5cad9-d533-4bd1-b3a5-e310bc13eeaa"
 
-# Open Data API Endpoint
 DATA_URL = "https://opend.data.go.th/get-ckan/datastore_search"
 
 
@@ -28,22 +26,21 @@ def home():
 @app.get("/api/zoo-visitors")
 def get_zoo_visitors():
 
-    # อ่าน API KEY จาก Render Environment
-    api_key = os.getenv("OPEND_API_KEY")
+    # อ่าน API KEY จาก Render
+    api_key = os.getenv("OPEND_API_KEY", "").strip()
 
     if not api_key:
         raise HTTPException(
             status_code=500,
-            detail="OPEND_API_KEY is not configured"
+            detail="ไม่พบ OPEND_API_KEY ใน Render Environment"
         )
 
-    # กำหนด Parameters
     params = {
         "resource_id": RESOURCE_ID,
         "limit": 5
     }
 
-    # กำหนด Headers
+    # ตามคู่มือ Data.go.th หน้า 36-37
     headers = {
         "api-key": api_key,
         "Accept": "application/json",
@@ -58,47 +55,42 @@ def get_zoo_visitors():
             timeout=30
         )
 
-        # ตรวจสอบ HTTP Status
-        if response.status_code in (401, 403):
+        # ตรวจสอบสถานะจาก Data.go.th
+        if response.status_code == 403:
             raise HTTPException(
                 status_code=502,
                 detail={
                     "message": "Open Data API rejected the request",
-                    "upstream_status": response.status_code,
+                    "upstream_status": 403,
                     "solution": "ตรวจสอบ API KEY และสิทธิ์การเข้าถึง API"
                 }
             )
 
         response.raise_for_status()
 
-        # แปลงข้อมูล JSON
         result = response.json()
 
         if not result.get("success"):
             raise HTTPException(
                 status_code=502,
-                detail="Data.go.th API returned an error"
+                detail={
+                    "message": "Data.go.th API returned an error",
+                    "response": result
+                }
             )
 
-        data_result = result.get("result", {})
-        records = data_result.get("records", [])
+        records = result.get("result", {}).get("records", [])
 
-        if not records:
-            raise HTTPException(
-                status_code=404,
-                detail="ไม่พบข้อมูลใน Resource ID ที่กำหนด"
-            )
-
-        # ส่งข้อมูลกลับ
         return {
             "status": "success",
-            "message": "ดึงข้อมูลสำเร็จ",
             "dataset": "zoo-visitors2569",
-            "organization": "องค์การสวนสัตว์แห่งประเทศไทย ในพระบรมราชูปถัมภ์",
+            "organization": "องค์การสวนสัตว์แห่งประเทศไทย",
             "fiscal_year": 2569,
             "resource_id": RESOURCE_ID,
             "source": "https://data.go.th/dataset/zoo-visitors2569",
-            "total_records": data_result.get("total", len(records)),
+            "total_records": result["result"].get(
+                "total", len(records)
+            ),
             "returned_records": len(records),
             "data": records
         }
@@ -115,5 +107,5 @@ def get_zoo_visitors():
     except ValueError:
         raise HTTPException(
             status_code=502,
-            detail="Invalid JSON response from Open Data API"
+            detail="Data.go.th returned invalid JSON"
         )
