@@ -26,7 +26,7 @@ def get_zoo_visitors():
 
     params = {
         "resource_id": RESOURCE_ID,
-        "limit": 1000
+        "limit": 5
     }
     try:
         response = requests.get(
