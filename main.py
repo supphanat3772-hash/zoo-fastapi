@@ -28,18 +28,18 @@ def get_zoo_visitors():
         "resource_id": RESOURCE_ID,
         "limit": 1000
     }
-
     try:
-       response = requests.get(
-    DATA_URL,
-    params=params,
-    headers={
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-        "Referer": "https://data.go.th/"
-    },
-    timeout=30
-)
+        response = requests.get(
+            DATA_URL,
+            params=params,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/json",
+                "Referer": "https://data.go.th/"
+            },
+            timeout=30
+        )
+
         response.raise_for_status()
 
         result = response.json()
