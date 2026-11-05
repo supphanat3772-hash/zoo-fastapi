@@ -9,7 +9,6 @@ app = FastAPI(
 )
 
 RESOURCE_ID = "57a5cad9-d533-4bd1-b3a5-e310bc13eeaa"
-
 DATA_URL = "https://data.go.th/api/3/action/datastore_search"
 
 
@@ -28,6 +27,7 @@ def get_zoo_visitors():
         "resource_id": RESOURCE_ID,
         "limit": 5
     }
+
     try:
         response = requests.get(
             DATA_URL,
@@ -40,37 +40,64 @@ def get_zoo_visitors():
             timeout=30
         )
 
-        response.raise_for_status()
-
-        result = response.json()
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=502,
-                detail="Data.go.th API returned an error"
-            )
-
-        records = result["result"].get("records", [])
-
-        if not records:
-            raise HTTPException(
-                status_code=404,
-                detail="ไม่พบข้อมูลใน Resource ID ที่กำหนด"
-            )
-
-        return {
-            "status": "success",
-            "dataset": "zoo-visitors2569",
-            "organization": "องค์การสวนสัตว์แห่งประเทศไทย ในพระบรมราชูปถัมภ์",
-            "fiscal_year": 2569,
-            "resource_id": RESOURCE_ID,
-            "source": "https://data.go.th/dataset/zoo-visitors2569",
-            "total_records": len(records),
-            "data": records
-        }
+    except requests.Timeout:
+        raise HTTPException(
+            status_code=504,
+            detail="Data.go.th connection timeout"
+        )
 
     except requests.RequestException as e:
         raise HTTPException(
             status_code=502,
-            detail=f"Data.go.th connection error: {str(e)}"
+            detail=f"Connection error: {str(e)}"
         )
+
+    # ตรวจสอบ HTTP Status จาก Data.go.th
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Data.go.th rejected the request",
+                "upstream_status": response.status_code,
+                "upstream_response": response.text[:1000]
+            }
+        )
+
+    # ตรวจสอบ JSON
+    try:
+        result = response.json()
+    except ValueError:
+        raise HTTPException(
+            status_code=502,
+            detail="Data.go.th returned invalid JSON"
+        )
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Data.go.th API returned an error",
+                "response": result
+            }
+        )
+
+    dataset = result.get("result", {})
+    records = dataset.get("records", [])
+
+    if not records:
+        raise HTTPException(
+            status_code=404,
+            detail="ไม่พบข้อมูลใน Resource ID ที่กำหนด"
+        )
+
+    return {
+        "status": "success",
+        "dataset": "zoo-visitors2569",
+        "organization": "องค์การสวนสัตว์แห่งประเทศไทย ในพระบรมราชูปถัมภ์",
+        "fiscal_year": 2569,
+        "resource_id": RESOURCE_ID,
+        "source": "https://data.go.th/dataset/zoo-visitors2569",
+        "total_records": dataset.get("total", len(records)),
+        "returned_records": len(records),
+        "data": records
+    }
